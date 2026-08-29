@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ROUTE // Web Proxy</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+  :root {
+    --bg: #0b0f14;
+    --bg-panel: #111820;
+    --line: #1e2a35;
+    --text: #d7e0e8;
+    --text-dim: #6b7f8f;
+    --cyan: #5ec8d8;
+    --amber: #f2a65a;
+    --ok: #6bbf8f;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    min-height: 100vh;
+    padding: 48px 20px;
+    background-image:
+      linear-gradient(var(--line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size: 32px 32px;
+    background-position: center;
+  }
+
+  .wrap {
+    max-width: 640px;
+    margin: 0 auto;
+  }
+
+  .eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    letter-spacing: 0.15em;
+    margin-bottom: 14px;
+  }
+
+  .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--ok);
+    box-shadow: 0 0 8px var(--ok);
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+
+  h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 2.1rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin-bottom: 6px;
+  }
+
+  h1 span { color: var(--cyan); }
+
+  .sub {
+    color: var(--text-dim);
+    font-size: 0.85rem;
+    margin-bottom: 40px;
+    line-height: 1.6;
+  }
+
+  /* --- ルート可視化(署名要素) --- */
+  .route {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 40px;
+    position: relative;
+    padding: 0 4px;
+  }
+
+  .node {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    z-index: 2;
+    flex-shrink: 0;
+  }
+
+  .node .box {
+    width: 46px;
+    height: 46px;
+    border: 1.5px solid var(--line);
+    background: var(--bg-panel);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    border-radius: 4px;
+    transition: border-color 0.3s;
+  }
+
+  .node.active .box {
+    border-color: var(--cyan);
+    box-shadow: 0 0 14px rgba(94, 200, 216, 0.25);
+  }
+
+  .node .label {
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    letter-spacing: 0.08em;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .track {
+    flex: 1;
+    height: 1px;
+    background: var(--line);
+    position: relative;
+    margin: 0 6px;
+    top: -13px;
+  }
+
+  .track .pulse-line {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 1px;
+    width: 0%;
+    background: var(--cyan);
+    box-shadow: 0 0 6px var(--cyan);
+    transition: width 0.6s ease;
+  }
+
+  .track.done .pulse-line { width: 100%; }
+
+  /* --- フォーム --- */
+  .panel {
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 24px;
+  }
+
+  .field { margin-bottom: 16px; }
+
+  .field label {
+    display: block;
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+    margin-bottom: 8px;
+  }
+
+  .field input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 12px 14px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .field input:focus { border-color: var(--cyan); }
+  .field input::placeholder { color: #3d4d5a; }
+
+  button {
+    width: 100%;
+    background: var(--cyan);
+    color: #071016;
+    border: none;
+    border-radius: 5px;
+    padding: 13px;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    font-size: 0.9rem;
+    letter-spacing: 0.03em;
+    cursor: pointer;
+    margin-top: 6px;
+    transition: filter 0.15s, transform 0.1s;
+  }
+
+  button:hover { filter: brightness(1.1); }
+  button:active { transform: scale(0.99); }
+
+  .status {
+    margin-top: 14px;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    min-height: 18px;
+  }
+
+  .status.err { color: #e08383; }
+  .status.ok { color: var(--ok); }
+
+  .hint {
+    margin-top: 28px;
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    line-height: 1.7;
+    border-left: 2px solid var(--line);
+    padding-left: 14px;
+  }
+
+  .hint code {
+    color: var(--amber);
+    background: rgba(242, 166, 90, 0.08);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  /* --- ショートカット (Chrome風グリッド) --- */
+  .favs {
+    margin-top: 20px;
+  }
+
+  .favs-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+    margin-bottom: 14px;
+  }
+
+  .fav-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+  }
+
+  .fav-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    position: relative;
+  }
+
+  .fav-tile .icon-box {
+    width: 56px;
+    height: 56px;
+    border-radius: 14px;
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    transition: border-color 0.15s, transform 0.1s;
+  }
+
+  .fav-tile:hover .icon-box {
+    border-color: var(--cyan);
+    transform: translateY(-2px);
+  }
+
+  .fav-tile:active .icon-box { transform: scale(0.96); }
+
+  .fav-tile .icon-box img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .fav-tile .icon-box .fallback {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 1.3rem;
+    color: var(--cyan);
+  }
+
+  .fav-tile .fav-name {
+    font-size: 0.68rem;
+    color: var(--text-dim);
+    text-align: center;
+    max-width: 68px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .fav-tile .fav-del {
+    position: absolute;
+    top: -6px;
+    right: 2px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    color: var(--text-dim);
+    font-size: 0.65rem;
+    line-height: 1;
+    padding: 0;
+    margin: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+
+  .fav-tile:hover .fav-del { display: flex; }
+  .fav-tile .fav-del:hover { color: #e08383; border-color: #e08383; filter: none; }
+
+  /* 追加タイル */
+  .fav-tile.add-tile .icon-box {
+    border-style: dashed;
+    color: var(--text-dim);
+    font-size: 1.4rem;
+  }
+
+  .fav-tile.add-tile:hover .icon-box {
+    color: var(--cyan);
+  }
+
+  @media (max-width: 480px) {
+    .node .label { display: none; }
+    h1 { font-size: 1.7rem; }
+    .fav-grid { grid-template-columns: repeat(3, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="eyebrow"><span class="dot"></span>WORKER: STANDBY</div>
+  <h1>ROU<span>TE</span></h1>
+  <p class="sub">任意のURLをWorker経由で取得します。まずWorkerのURLを設定してください。</p>
+
+  <div class="route">
+    <div class="node active" id="node-you">
+      <div class="box">●</div>
+      <div class="label">YOU</div>
+    </div>
+    <div class="track" id="track1"><div class="pulse-line"></div></div>
+    <div class="node" id="node-proxy">
+      <div class="box">⇄</div>
+      <div class="label">PROXY</div>
+    </div>
+    <div class="track" id="track2"><div class="pulse-line"></div></div>
+    <div class="node" id="node-target">
+      <div class="box">◎</div>
+      <div class="label">TARGET</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="field">
+      <label for="target">TARGET URL</label>
+      <input id="target" type="text" placeholder="https://example.com" autocomplete="off">
+    </div>
+    <button id="go">経路を開く →</button>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="favs">
+    <div class="favs-head">
+      <span>ショートカット</span>
+    </div>
+    <div class="fav-grid" id="favGrid"></div>
+  </div>
+
+  <div class="hint">
+    TARGET URLを入力して「経路を開く」、またはショートカットのアイコンをクリックでもOK。
+    ショートカット画像は <code>tanabesan.github.io/proxy/file/</code> 配下のファイル名をJS内 <code>favorites</code> の <code>icon</code> に指定すると反映されます。
+  </div>
+
+</div>
+
+<script>
+  const WORKER_ORIGIN = 'https://yuki-proxy.shimoshimo0204.workers.dev';
+  const ICON_BASE = 'https://tanabesan.github.io/proxy/file/';
+
+  const targetInput = document.getElementById('target');
+  const goBtn = document.getElementById('go');
+  const statusEl = document.getElementById('status');
+  const nodeProxy = document.getElementById('node-proxy');
+  const nodeTarget = document.getElementById('node-target');
+  const track1 = document.getElementById('track1');
+  const track2 = document.getElementById('track2');
+  const favGrid = document.getElementById('favGrid');
+
+  // デフォルトのショートカット。icon は ICON_BASE + icon のファイル名。
+  // 画像がまだ置かれていない/読み込めない場合は自動で頭文字アイコンにフォールバックします。
+  let favorites = [
+    { name: 'YouTube',  url: 'https://www.youtube.com', icon: 'youtube.png' },
+    { name: 'Google',   url: 'https://www.google.com',  icon: 'google.png' },
+    { name: 'LOLBeans', url: 'https://lolbeans.io',      icon: 'lolbeans.png' },
+    { name: 'Wikipedia',url: 'https://ja.wikipedia.org', icon: 'wikipedia.png' },
+  ];
+
+  function normalize(url) {
+    if (!url) return '';
+    url = url.trim();
+    if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+    return url;
+  }
+
+  function setStatus(msg, type) {
+    statusEl.textContent = msg;
+    statusEl.className = 'status' + (type ? ' ' + type : '');
+  }
+
+  function hostOf(url) {
+    try { return new URL(url).hostname.replace(/^www\./, ''); }
+    catch { return url; }
+  }
+
+  function openTarget(url) {
+    targetInput.value = url;
+    targetInput.dispatchEvent(new Event('input'));
+    go();
+  }
+
+  function renderFavorites() {
+    favGrid.innerHTML = '';
+
+    favorites.forEach((fav, i) => {
+      const tile = document.createElement('div');
+      tile.className = 'fav-tile';
+
+      const box = document.createElement('div');
+      box.className = 'icon-box';
+
+      if (fav.icon) {
+        const img = document.createElement('img');
+        img.src = ICON_BASE + fav.icon;
+        img.alt = fav.name;
+        img.onerror = () => {
+          box.innerHTML = `<span class="fallback">${fav.name.charAt(0).toUpperCase()}</span>`;
+        };
+        box.appendChild(img);
+      } else {
+        box.innerHTML = `<span class="fallback">${fav.name.charAt(0).toUpperCase()}</span>`;
+      }
+
+      const del = document.createElement('button');
+      del.className = 'fav-del';
+      del.textContent = '×';
+      del.title = '削除';
+      del.addEventListener('click', (e) => {
+        e.stopPropagation();
+        favorites.splice(i, 1);
+        renderFavorites();
+      });
+
+      const name = document.createElement('div');
+      name.className = 'fav-name';
+      name.textContent = fav.name;
+
+      tile.appendChild(box);
+      tile.appendChild(del);
+      tile.appendChild(name);
+      tile.addEventListener('click', () => openTarget(fav.url));
+
+      favGrid.appendChild(tile);
+    });
+
+    // 追加タイル
+    const addTile = document.createElement('div');
+    addTile.className = 'fav-tile add-tile';
+    addTile.innerHTML = `<div class="icon-box">+</div><div class="fav-name">追加</div>`;
+    addTile.addEventListener('click', () => {
+      const target = normalize(targetInput.value);
+      if (!target) {
+        setStatus('先にTARGET URLを入力してから追加してください', 'err');
+        return;
+      }
+      if (favorites.some(f => f.url === target)) {
+        setStatus('すでに追加済みです', 'err');
+        return;
+      }
+      const name = prompt('表示名を入力', hostOf(target)) || hostOf(target);
+      favorites.push({ name, url: target, icon: null });
+      renderFavorites();
+      setStatus('ショートカットに追加しました', 'ok');
+    });
+    favGrid.appendChild(addTile);
+  }
+
+  targetInput.addEventListener('input', () => {
+    const has = targetInput.value.trim().length > 0;
+    track1.classList.toggle('done', has);
+    nodeProxy.classList.toggle('active', has);
+    track2.classList.toggle('done', has);
+    nodeTarget.classList.toggle('active', has);
+  });
+
+  function go() {
+    const target = normalize(targetInput.value);
+    if (!target) {
+      setStatus('TARGET URLを入力してください', 'err');
+      return;
+    }
+
+    track1.classList.add('done');
+    track2.classList.add('done');
+    nodeProxy.classList.add('active');
+    nodeTarget.classList.add('active');
+    setStatus('接続中... ' + target, 'ok');
+
+    const dest = WORKER_ORIGIN.replace(/\/$/, '') + '/?url=' + encodeURIComponent(target);
+    setTimeout(() => { window.location.href = dest; }, 250);
+  }
+
+  goBtn.addEventListener('click', go);
+  targetInput.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+
+  renderFavorites();
+</script>
+</body>
+</html>

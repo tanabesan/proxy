@@ -298,40 +298,6 @@
     white-space: nowrap;
   }
 
-  .fav-tile .fav-del {
-    position: absolute;
-    top: -6px;
-    right: 2px;
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    background: var(--bg-panel);
-    border: 1px solid var(--line);
-    color: var(--text-dim);
-    font-size: 0.65rem;
-    line-height: 1;
-    padding: 0;
-    margin: 0;
-    display: none;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-  }
-
-  .fav-tile:hover .fav-del { display: flex; }
-  .fav-tile .fav-del:hover { color: #e08383; border-color: #e08383; filter: none; }
-
-  /* 追加タイル */
-  .fav-tile.add-tile .icon-box {
-    border-style: dashed;
-    color: var(--text-dim);
-    font-size: 1.4rem;
-  }
-
-  .fav-tile.add-tile:hover .icon-box {
-    color: var(--cyan);
-  }
-
   @media (max-width: 480px) {
     .node .label { display: none; }
     h1 { font-size: 1.7rem; }
@@ -380,8 +346,7 @@
   </div>
 
   <div class="hint">
-    TARGET URLを入力して「経路を開く」、またはショートカットのアイコンをクリックでもOK。
-    ショートカット画像は <code>tanabesan.github.io/proxy/file/</code> 配下のファイル名をJS内 <code>favorites</code> の <code>icon</code> に指定すると反映されます。
+    TARGET URLを入力して「経路を開く」、またはショートカットのアイコンをクリック。
   </div>
 
 </div>
@@ -434,7 +399,7 @@
   function renderFavorites() {
     favGrid.innerHTML = '';
 
-    favorites.forEach((fav, i) => {
+    favorites.forEach((fav) => {
       const tile = document.createElement('div');
       tile.className = 'fav-tile';
 
@@ -453,48 +418,16 @@
         box.innerHTML = `<span class="fallback">${fav.name.charAt(0).toUpperCase()}</span>`;
       }
 
-      const del = document.createElement('button');
-      del.className = 'fav-del';
-      del.textContent = '×';
-      del.title = '削除';
-      del.addEventListener('click', (e) => {
-        e.stopPropagation();
-        favorites.splice(i, 1);
-        renderFavorites();
-      });
-
       const name = document.createElement('div');
       name.className = 'fav-name';
       name.textContent = fav.name;
 
       tile.appendChild(box);
-      tile.appendChild(del);
       tile.appendChild(name);
       tile.addEventListener('click', () => openTarget(fav.url));
 
       favGrid.appendChild(tile);
     });
-
-    // 追加タイル
-    const addTile = document.createElement('div');
-    addTile.className = 'fav-tile add-tile';
-    addTile.innerHTML = `<div class="icon-box">+</div><div class="fav-name">追加</div>`;
-    addTile.addEventListener('click', () => {
-      const target = normalize(targetInput.value);
-      if (!target) {
-        setStatus('先にTARGET URLを入力してから追加してください', 'err');
-        return;
-      }
-      if (favorites.some(f => f.url === target)) {
-        setStatus('すでに追加済みです', 'err');
-        return;
-      }
-      const name = prompt('表示名を入力', hostOf(target)) || hostOf(target);
-      favorites.push({ name, url: target, icon: null });
-      renderFavorites();
-      setStatus('ショートカットに追加しました', 'ok');
-    });
-    favGrid.appendChild(addTile);
   }
 
   targetInput.addEventListener('input', () => {

@@ -158,7 +158,8 @@
 </div>
 
 <script>
-  const API_BASE = location.origin + '/api/video?id=';
+  const WORKER_ORIGIN = 'https://yuki-proxy.shimoshimo0204.workers.dev';
+  const API_BASE = WORKER_ORIGIN + '/api/video?id=';
 
   const vidInput = document.getElementById('vid');
   const goBtn = document.getElementById('go');

@@ -212,7 +212,7 @@
       const data = await res.json();
 
       if (!res.ok || data.error) {
-        setStatus('取得失敗: ' + (data.error || res.status), 'err');
+        setStatus('取得失敗: ' + (data.error || res.status) + (data.detail ? ' (' + data.detail + ')' : ''), 'err');
         return;
       }
 

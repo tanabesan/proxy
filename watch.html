@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WATCH // Yuki Proxy</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+  :root {
+    --bg: #0b0f14;
+    --bg-panel: #111820;
+    --line: #1e2a35;
+    --text: #d7e0e8;
+    --text-dim: #6b7f8f;
+    --cyan: #5ec8d8;
+    --amber: #f2a65a;
+    --ok: #6bbf8f;
+    --err: #e08383;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    min-height: 100vh;
+    padding: 40px 20px;
+  }
+
+  .wrap { max-width: 760px; margin: 0 auto; }
+
+  h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 1.6rem;
+    font-weight: 700;
+    margin-bottom: 24px;
+  }
+
+  h1 span { color: var(--cyan); }
+
+  .panel {
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+
+  .field { display: flex; gap: 8px; }
+
+  .field input {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 12px 14px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.9rem;
+    outline: none;
+  }
+
+  .field input:focus { border-color: var(--cyan); }
+
+  button {
+    background: var(--cyan);
+    color: #071016;
+    border: none;
+    border-radius: 5px;
+    padding: 0 22px;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+
+  button:hover { filter: brightness(1.1); }
+
+  .status {
+    margin-top: 12px;
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    min-height: 18px;
+  }
+
+  .status.err { color: var(--err); }
+  .status.ok { color: var(--ok); }
+
+  video {
+    width: 100%;
+    border-radius: 8px;
+    background: #000;
+    display: none;
+  }
+
+  .meta {
+    margin-top: 14px;
+    display: none;
+  }
+
+  .meta .title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .meta .author {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+  }
+
+  .quality-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+  }
+
+  .quality-row button {
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--text-dim);
+    padding: 6px 12px;
+    font-size: 0.72rem;
+    border-radius: 5px;
+  }
+
+  .quality-row button.active {
+    border-color: var(--cyan);
+    color: var(--cyan);
+  }
+
+  .quality-row button:hover { filter: none; border-color: var(--cyan); color: var(--cyan); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>WA<span>TCH</span></h1>
+
+  <div class="panel">
+    <div class="field">
+      <input id="vid" type="text" placeholder="動画ID または YouTubeのURL" autocomplete="off">
+      <button id="go">再生</button>
+    </div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <video id="player" controls></video>
+
+  <div class="meta" id="meta">
+    <div class="title" id="metaTitle"></div>
+    <div class="author" id="metaAuthor"></div>
+    <div class="quality-row" id="qualityRow"></div>
+  </div>
+</div>
+
+<script>
+  const API_BASE = location.origin + '/api/video?id=';
+
+  const vidInput = document.getElementById('vid');
+  const goBtn = document.getElementById('go');
+  const statusEl = document.getElementById('status');
+  const player = document.getElementById('player');
+  const meta = document.getElementById('meta');
+  const metaTitle = document.getElementById('metaTitle');
+  const metaAuthor = document.getElementById('metaAuthor');
+  const qualityRow = document.getElementById('qualityRow');
+
+  function setStatus(msg, type) {
+    statusEl.textContent = msg;
+    statusEl.className = 'status' + (type ? ' ' + type : '');
+  }
+
+  // URL貼り付けにも対応して動画IDだけ抜き出す
+  function extractVideoId(input) {
+    input = input.trim();
+    if (!input) return '';
+    try {
+      const u = new URL(input);
+      if (u.searchParams.get('v')) return u.searchParams.get('v');
+      if (u.hostname === 'youtu.be') return u.pathname.slice(1);
+    } catch (e) {
+      // URLじゃなければそのままIDとして扱う
+    }
+    return input;
+  }
+
+  function playStream(streamUrl) {
+    player.src = streamUrl;
+    player.style.display = 'block';
+    player.play().catch(() => {});
+  }
+
+  async function load() {
+    const id = extractVideoId(vidInput.value);
+    if (!id) {
+      setStatus('動画IDまたはURLを入力してください', 'err');
+      return;
+    }
+
+    setStatus('取得中... ' + id);
+    meta.style.display = 'none';
+    player.style.display = 'none';
+    qualityRow.innerHTML = '';
+
+    try {
+      const res = await fetch(API_BASE + encodeURIComponent(id));
+      const data = await res.json();
+
+      if (!res.ok || data.error) {
+        setStatus('取得失敗: ' + (data.error || res.status), 'err');
+        return;
+      }
+
+      const streams = data.formatStreams || [];
+      if (streams.length === 0) {
+        setStatus('再生可能なストリームが見つかりませんでした', 'err');
+        return;
+      }
+
+      metaTitle.textContent = data.title || '(タイトル不明)';
+      metaAuthor.textContent = (data.author || '') + '  [' + data.instance + ']';
+      meta.style.display = 'block';
+
+      streams.forEach((s, i) => {
+        const btn = document.createElement('button');
+        btn.textContent = s.quality || ('stream ' + i);
+        btn.addEventListener('click', () => {
+          playStream(s.url);
+          [...qualityRow.children].forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+        });
+        qualityRow.appendChild(btn);
+      });
+
+      // 一番良さそうな画質(最後の要素)を自動再生
+      const first = streams[streams.length - 1];
+      playStream(first.url);
+      qualityRow.lastChild && qualityRow.lastChild.classList.add('active');
+
+      setStatus('再生中: ' + data.title, 'ok');
+    } catch (e) {
+      setStatus('エラー: ' + e.message, 'err');
+    }
+  }
+
+  goBtn.addEventListener('click', load);
+  vidInput.addEventListener('keydown', e => { if (e.key === 'Enter') load(); });
+
+  // ?v=ID でアクセスされた場合は自動読み込み
+  const params = new URLSearchParams(location.search);
+  if (params.get('v')) {
+    vidInput.value = params.get('v');
+    load();
+  }
+</script>
+</body>
+</html>
